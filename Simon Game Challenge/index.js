@@ -32,14 +32,10 @@ $(".btn").click(function() {
 
 
 function checkAnswer(currentguess){
-    console.log(currentguess);
-    console.log(gamePattern);
-    console.log(userClickedPattern);
-    console.log(gamePattern[currentguess]);
-    console.log(userClickedPattern[currentguess]);
-
+    // Check if current guess is equal to the corresponding color in the gamePattern
     if (userClickedPattern[currentguess] === gamePattern[currentguess]){
         console.log("im in check answer");
+        // If the current guess is the last one of this sequence 
         if (userClickedPattern.length === gamePattern.length){
             setTimeout(function(){
                 nextSequence();
@@ -47,12 +43,14 @@ function checkAnswer(currentguess){
         }
     } else {
         makeSound("wrong");
+
         $("body").addClass("game-over");
         setTimeout(function(){
             $("body").removeClass("game-over");
         }, 200);
-        console.log("hello");
+        
         $("#level-title").text("Game Over, Press Any Key to Restart");
+        
         startOver();
     }
 }
