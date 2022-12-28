@@ -6,7 +6,7 @@
 <div>
     <% homePosts.forEach(element => { %>
     <h1><%= element.title %></h1>
-    <p><%= _.truncate(element.content, {"length": 150, "separator": ' ',"omission": '...'}) %> <a href="/posts/<%= element.slug %>">Read More</a></p>
+    <p><%= _.truncate(element.content, {"length": 150, "separator": ' ',"omission": '...'}) %> <a href="/posts/<%= element._id %>">Read More</a></p>
    
     <% }); %>
 </div>
