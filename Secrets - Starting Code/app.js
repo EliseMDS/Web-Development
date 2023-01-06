@@ -29,22 +29,27 @@ app.use(passport.session());
 mongoose.set("strictQuery", false);
 mongoose.connect('mongodb://127.0.0.1:27017/userDB');
 
+// Create Schema
 const userSchema = new mongoose.Schema({
     username: String,
     googleId: String,
-    facebookId: String
+    facebookId: String,
+    secrets: {
+        type: [String]
+    }
 });
 
-// Plugins
+// Add Plugins to the schema
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
 
+// Create Collection
 const User = new mongoose.model("User", userSchema);
 
 //Local sign in
 passport.use(User.createStrategy());
 
-// Sessions workings for all type of sign in
+// Sessions workings for all type of authentification
 passport.serializeUser(function(user, cb) {
     process.nextTick(function() {
       cb(null, { id: user.id, username: user.username, name: user.name });
@@ -55,6 +60,8 @@ passport.deserializeUser(function(user, cb) {
     return cb(null, user);
     });
 });
+
+///////////////////////////////////////////////////////// SOCIAL AUTH STRATEGY /////////////////////////////////////////////////////////
 
 // Google sign in
 passport.use(new GoogleStrategy({
@@ -82,7 +89,7 @@ passport.use(new FacebookStrategy({
     profileFields: ['emails']
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    //console.log(profile);
     User.findOrCreate({ 
         username: profile.provider + profile.emails[0].value,
         facebookId: profile.id 
@@ -93,18 +100,16 @@ passport.use(new FacebookStrategy({
 ));
 
 
-
+////////////////////////////////////////////////////////////// ROUTES //////////////////////////////////////////////////////////////
 
 app.get("/", function(req, res){
     res.render("home");
 });
 
 // Google routes
-app.route("/auth/google")
-  .get(passport.authenticate('google', {
+app.get("/auth/google", passport.authenticate('google', {
     scope: ["profile","email"]
 }));
-
 app.get("/auth/google/secrets", 
     passport.authenticate('google', { failureRedirect: '/login' }),
     function(req, res) {
@@ -113,11 +118,9 @@ app.get("/auth/google/secrets",
 });
 
 // FB routes
-app.route("/auth/facebook")
-  .get(passport.authenticate('facebook', {
+app.get("/auth/facebook", passport.authenticate('facebook', {
     scope: ["email"]
 }));
-
 app.get("/auth/facebook/secrets",
   passport.authenticate('facebook', { failureRedirect: '/login' }),
   function(req, res) {
@@ -126,42 +129,29 @@ app.get("/auth/facebook/secrets",
 });
 
 
-
-app.get("/login", function(req, res){
+app.route("/login")
+  .get(function(req, res){
     res.render("login");
+  })
+  .post(passport.authenticate("local"), function(req, res) {
+        const user = new User({
+            username: req.body.username,
+            password: req.body.password     
+        });
+        req.login(user, function(err) {
+            if(err) {
+                console.log(err);
+            } else {
+                res.redirect("/secrets");
+            }
+        });
 });
 
-app.get("/register", function(req, res){
+app.route("/register")
+  .get(function(req, res){
     res.render("register");
-});
-
-app.get("/secrets", function(req, res){
-    // The below line was added so we can't display the "/secrets" page
-    // after we logged out using the "back" button of the browser, which
-    // would normally display the browser cache and thus expose the 
-    // "/secrets" page we want to protect. 
-    res.set(
-        'Cache-Control', 
-        'no-cache, private, no-store, must-revalidate, max-stal e=0, post-check=0, pre-check=0'
-    );
-
-    if (req.isAuthenticated()){
-        res.render("secrets");
-    } else {
-        res.redirect("/login");
-    }
-});
-
-app.get("/logout", function(req, res){
-    req.logout(function(err){
-        if (err){
-            return next(err);
-        }
-        res.redirect("/");
-    });
-});
-
-app.post("/register", function(req, res){
+})
+  .post(function(req, res){
     User.register({username: req.body.username}, req.body.password, function(err, user){
         if (err){
             console.log('error registering user');
@@ -176,29 +166,57 @@ app.post("/register", function(req, res){
 
 });
 
-// this is the new login route, which authenticates first and THEN
-// does the login (which is required to create the session, or so I 
-// understood from the passport.js documentation). 
-// A failed login (wrong password) will give the browser error 
-// "unauthorized".
-app.post("/login", 
-    passport.authenticate("local"), function(req, res) {
-        const user = new User({
-            username: req.body.username,
-            password: req.body.password     
-        });
-        req.login(user, function(err) {
-            if(err) {
-                console.log(err);
-            } else {
-                res.redirect("/secrets");
+app.get("/secrets", function(req, res){
+    // This page is now public, people can see it without sign in 
+    User.find({"secrets": {$ne: null}}, function(err, foundUsers){ // pick out the users where the secrets field != null
+        if (err){
+            console.log(err);
+        } else {
+            if (foundUsers){
+                res.render("secrets", {usersWithSecrets: foundUsers});
             }
-        });
+        }
+    }) 
+});
+
+
+app.route("/submit")
+  .get(function(req, res){
+    if (req.isAuthenticated()){
+        res.render("submit");
+    } else {
+        res.redirect("/login");
+    }
+  })
+  .post(function(req, res){
+    const submittedSecret = req.body.secret;
+
+    console.log(req.user);
+
+    User.findById(req.user.id, function(err, foundUser){
+        if (err){
+            console.log(err);
+        } else {
+            if (foundUser){
+                console.log(foundUser);
+                foundUser.secrets.push(submittedSecret);
+                foundUser.save(function(){
+                    res.redirect("/secrets");
+                });
+            }
+        }
+    })
+
+  })
+
+app.get("/logout", function(req, res){
+    req.logout(function(err){
+        if (err){
+            return next(err);
+        }
+        res.redirect("/");
     });
-
-
-
-
+});
 
 
 
@@ -207,4 +225,4 @@ app.post("/login",
 
 app.listen(3000, function(req, res){
     console.log("Server started on port 3000.");
-})
+});
